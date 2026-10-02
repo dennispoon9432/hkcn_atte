@@ -58,14 +58,15 @@ export default function App() {
     setTimeout(() => setToastMsg(null), 2500);
   };
 
-  // Sync data from Google Sheet
+  // Sync data from Google Sheet (both events and cross-device system logs)
   const syncData = useCallback(async (showIndicator = false) => {
     if (showIndicator) setIsSyncing(true);
     try {
-      const sheetEvents = await StorageService.syncFromGoogleSheet();
-      if (sheetEvents && sheetEvents.length > 0) {
-        setEvents(sheetEvents);
-        if (showIndicator) showToast('已從 Google Sheet 同步最新紀錄！');
+      const result = await StorageService.syncFromGoogleSheet();
+      if (result) {
+        setEvents(result.events);
+        setLogs(result.logs);
+        if (showIndicator) showToast('已從 Google Sheet 同步最新紀錄與操作日誌！');
       }
     } catch (e) {
       console.warn('Sync error', e);
