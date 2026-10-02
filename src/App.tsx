@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SimpleEvent, AttendanceChoice } from './types';
 import { StorageService } from './services/storage';
 import {
@@ -24,6 +24,9 @@ import {
   Calendar,
   FileSpreadsheet,
   RefreshCw,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 
 export default function App() {
@@ -39,6 +42,11 @@ export default function App() {
   } | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Drag and drop reordering states
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const touchDragRef = useRef<{ startIndex: number } | null>(null);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -80,6 +88,78 @@ export default function App() {
       clearInterval(interval);
     };
   }, [syncData]);
+
+  // Reordering function: swaps or shifts event order and syncs to Google Sheet
+  const handleMoveEvent = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= events.length || fromIndex === toIndex) return;
+    const updated = [...events];
+    const [moved] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, moved);
+    setEvents(updated);
+    StorageService.saveEvents(updated);
+    StorageService.pushAllEventsToGoogleSheet(updated);
+    showToast('已更新活動排列次序！');
+  };
+
+  const handleDragStart = (index: number, e: React.DragEvent) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (index: number, e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = (index: number, e: React.DragEvent) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      handleMoveEvent(draggedIndex, index);
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  // Touch device drag and drop handlers
+  const handleTouchStart = (index: number) => {
+    touchDragRef.current = { startIndex: index };
+    setDraggedIndex(index);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchDragRef.current) return;
+    const touch = e.touches[0];
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+    const cardElement = targetElement?.closest('[data-event-index]');
+    if (cardElement) {
+      const targetIdx = Number(cardElement.getAttribute('data-event-index'));
+      if (!isNaN(targetIdx) && targetIdx !== dragOverIndex) {
+        setDragOverIndex(targetIdx);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (
+      touchDragRef.current &&
+      dragOverIndex !== null &&
+      dragOverIndex !== touchDragRef.current.startIndex
+    ) {
+      handleMoveEvent(touchDragRef.current.startIndex, dragOverIndex);
+    }
+    touchDragRef.current = null;
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
 
   // When clicking an RSVP button: opens the member prompt
   const handleOpenRSVPPrompt = (event: SimpleEvent, choice: AttendanceChoice) => {
@@ -216,18 +296,20 @@ export default function App() {
                   title="從 Google Sheet 重新整理最新數據"
                   className="p-1 text-slate-400 hover:text-emerald-600 rounded-lg cursor-pointer"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`}
+                  />
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Right Action: Google Sheet Sync Modal, Copy Secret Link, Add Event */}
+          {/* Right Action: Google Sheet, Copy Secret Link, Add Event */}
           <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => setShowSheetModal(true)}
               className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="點此查看 Google Sheet 及雙向同步設定"
+              title="點此查看 Google Sheet 及雙向同步狀態"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
               <span className="hidden sm:inline">Google Sheet</span>
@@ -258,23 +340,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Sync Warning Bar if Apps Script not yet connected */}
-      {!isScriptConnected && (
-        <div className="bg-amber-500/10 border-b border-amber-300/40 px-4 py-2">
-          <div className="max-w-3xl mx-auto flex items-center justify-between gap-2 text-xs">
-            <span className="text-amber-800 font-medium">
-              💡 尚未完成 Google Sheet 雙向寫入設定，請點此完成 30 秒設定以實現跨裝置即時更新！
-            </span>
-            <button
-              onClick={() => setShowSheetModal(true)}
-              className="px-2.5 py-1 bg-amber-600 text-white rounded-lg font-bold text-[11px] shrink-0 cursor-pointer hover:bg-amber-700"
-            >
-              立即設定
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Main Container */}
       <main className="max-w-3xl mx-auto px-4 py-5 space-y-4">
         {events.length === 0 ? (
@@ -289,19 +354,79 @@ export default function App() {
             </button>
           </div>
         ) : (
-          events.map((evt) => {
+          events.map((evt, index) => {
             const attendingList = CORE_MEMBERS.filter((m) => evt.attendance[m] === 'attending');
             const declinedList = CORE_MEMBERS.filter((m) => evt.attendance[m] === 'declined');
             const tbcList = CORE_MEMBERS.filter(
               (m) => evt.attendance[m] === 'tbc' || !evt.attendance[m]
             );
 
+            const isBeingDragged = draggedIndex === index;
+            const isDragOver = dragOverIndex === index && draggedIndex !== index;
+
             return (
               <article
                 key={evt.id}
-                className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden"
+                data-event-index={index}
+                onDragOver={(e) => handleDragOver(index, e)}
+                onDrop={(e) => handleDrop(index, e)}
+                className={`bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden transition-all duration-200 ${
+                  isBeingDragged ? 'opacity-40 border-dashed border-[#00A651] scale-[0.98]' : ''
+                } ${isDragOver ? 'ring-2 ring-[#00A651] border-[#00A651] scale-[1.01]' : ''}`}
               >
-                {/* Event Header with Title, Date, Edit & Delete */}
+                {/* 1. 頂部長按拖拉按鈕 (Drag Handle) */}
+                <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(index, e)}
+                  onDragEnd={handleDragEnd}
+                  onTouchStart={() => handleTouchStart(index)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-slate-500 cursor-grab active:cursor-grabbing hover:bg-slate-100/90 select-none transition-colors group"
+                  title="長按並拖拉以調整活動次序"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-md bg-white border border-slate-200 text-slate-400 group-hover:text-emerald-600 transition-colors flex items-center justify-center shadow-2xs">
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-mono font-black flex items-center justify-center">
+                        {index + 1}
+                      </span>
+                      <span>長按拖拉排位</span>
+                    </span>
+                  </div>
+
+                  {/* 向上／向下快速微調按鈕 */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMoveEvent(index, index - 1);
+                      }}
+                      disabled={index === 0}
+                      title="向上移"
+                      className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer transition-colors"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMoveEvent(index, index + 1);
+                      }}
+                      disabled={index === events.length - 1}
+                      title="向下移"
+                      className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer transition-colors"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Event Header with Title, Date, Edit & Delete */}
                 <div className="p-4 sm:p-5 border-b border-slate-100 flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
@@ -334,14 +459,14 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 3 RSVP Buttons: 去到 / 去唔到 / TBC */}
+                {/* 3. 3 RSVP Buttons: 去到 / 去唔到 / TBC */}
                 <div className="p-4 sm:p-5 bg-slate-50/70 border-b border-slate-100 space-y-2">
                   <div className="text-[11px] font-bold text-slate-500">
                     點擊你的出席狀態（點擊後會彈出選擇你的名字）：
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
-                    {/* 1. 去到 */}
+                    {/* 去到 */}
                     <button
                       type="button"
                       onClick={() => handleOpenRSVPPrompt(evt, 'attending')}
@@ -351,7 +476,7 @@ export default function App() {
                       <span>去到</span>
                     </button>
 
-                    {/* 2. 去唔到 */}
+                    {/* 去唔到 */}
                     <button
                       type="button"
                       onClick={() => handleOpenRSVPPrompt(evt, 'declined')}
@@ -361,7 +486,7 @@ export default function App() {
                       <span>去唔到</span>
                     </button>
 
-                    {/* 3. TBC */}
+                    {/* TBC */}
                     <button
                       type="button"
                       onClick={() => handleOpenRSVPPrompt(evt, 'tbc')}
@@ -373,7 +498,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Attendance Breakdown (去到 / 去唔到 / TBC) */}
+                {/* 4. Attendance Breakdown (去到 / 去唔到 / TBC) */}
                 <div className="p-4 sm:p-5 space-y-3 text-xs">
                   {/* 去到 */}
                   <div className="flex items-start gap-2.5">
