@@ -2,9 +2,11 @@
  * 香港城北扶青社 - Google Sheet 專屬後端 API (Google Apps Script)
  * 已部署網址：https://script.google.com/macros/s/AKfycbw65_gDvA3QXOnO4oel3pSUcdLfja_u8-PMJIYKLdvX5XEbaoITrO2Op-BKy6BGCt1K/exec
  * 
- * 支援功能：
- * 1. 分頁 1「Events」：活動與出席名單雙向同步
- * 2. 分頁 2「SystemLogs」：跨裝置集中記錄所有改動紀錄
+ * 欄位次序：
+ * 1. 去到
+ * 2. 遲到早退
+ * 3. 去唔到
+ * 4. TBC
  */
 
 function doGet(e) {
@@ -29,12 +31,8 @@ function doGet(e) {
     if (row[3]) {
       try {
         var parsed = JSON.parse(String(row[3]));
-        if (parsed.attendance) {
-          attendance = parsed.attendance;
-          remarks = parsed.remarks || {};
-        } else {
-          attendance = parsed;
-        }
+        attendance = parsed.attendance || parsed;
+        remarks = parsed.remarks || {};
       } catch (err) {}
     }
 
@@ -127,12 +125,8 @@ function doPost(e) {
           var remarks = {};
           try {
             var parsed = JSON.parse(data[i][3] || '{}');
-            if (parsed.attendance) {
-              attendance = parsed.attendance;
-              remarks = parsed.remarks || {};
-            } else {
-              attendance = parsed;
-            }
+            attendance = parsed.attendance || parsed;
+            remarks = parsed.remarks || {};
           } catch (err) {}
 
           attendance[payload.memberName] = payload.choice;
@@ -143,10 +137,11 @@ function doPost(e) {
           }
 
           eventsSheet.getRange(i + 1, 4).setValue(JSON.stringify({ attendance: attendance, remarks: remarks }));
+          // 順序: 1.去到, 2.遲到早退, 3.去唔到, 4.TBC
           eventsSheet.getRange(i + 1, 6).setValue(getSummaryText(attendance, remarks, 'attending'));
-          eventsSheet.getRange(i + 1, 7).setValue(getSummaryText(attendance, remarks, 'declined'));
-          eventsSheet.getRange(i + 1, 8).setValue(getSummaryText(attendance, remarks, 'tbc'));
-          eventsSheet.getRange(i + 1, 9).setValue(getSummaryText(attendance, remarks, 'late_early'));
+          eventsSheet.getRange(i + 1, 7).setValue(getSummaryText(attendance, remarks, 'late_early'));
+          eventsSheet.getRange(i + 1, 8).setValue(getSummaryText(attendance, remarks, 'declined'));
+          eventsSheet.getRange(i + 1, 9).setValue(getSummaryText(attendance, remarks, 'tbc'));
           found = true;
           break;
         }
@@ -191,9 +186,9 @@ function writeAllEvents(sheet, events) {
       JSON.stringify(payloadObj),
       evt.createdAt || new Date().toISOString(),
       getSummaryText(attendance, remarks, 'attending'),
+      getSummaryText(attendance, remarks, 'late_early'),
       getSummaryText(attendance, remarks, 'declined'),
-      getSummaryText(attendance, remarks, 'tbc'),
-      getSummaryText(attendance, remarks, 'late_early')
+      getSummaryText(attendance, remarks, 'tbc')
     ]);
   }
 
@@ -237,9 +232,9 @@ function getEventsHeaders() {
     '出席名冊數據 (JSON)',
     '建立時間 (CreatedAt)',
     '去到名單 (Attending)',
+    '遲到早退名單 (Late/Early)',
     '去唔到名單 (Declined)',
-    'TBC名單 (TBC)',
-    '遲到早退名單 (Late/Early)'
+    'TBC名單 (TBC)'
   ];
 }
 

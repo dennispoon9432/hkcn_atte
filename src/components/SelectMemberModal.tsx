@@ -26,6 +26,11 @@ export const SelectMemberModal: React.FC<SelectMemberModalProps> = ({
       badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
       btnHover: 'hover:bg-emerald-50 hover:border-[#00A651] hover:text-[#00A651]',
       btnSelected: 'bg-[#00A651] text-white border-[#00A651]',
+      themeBg: 'bg-emerald-50/70 border-emerald-200',
+      iconColor: 'text-[#00A651]',
+      textHighlight: 'text-emerald-700',
+      chipActive: 'bg-[#00A651] text-white border-[#00A651]',
+      actionBtnClass: 'bg-[#00A651] hover:bg-[#008f45]',
     },
     late_early: {
       label: '遲到早退',
@@ -33,6 +38,11 @@ export const SelectMemberModal: React.FC<SelectMemberModalProps> = ({
       badgeClass: 'bg-indigo-100 text-indigo-900 border-indigo-300',
       btnHover: 'hover:bg-indigo-50 hover:border-indigo-500 hover:text-indigo-700',
       btnSelected: 'bg-indigo-600 text-white border-indigo-600',
+      themeBg: 'bg-indigo-50/70 border-indigo-200',
+      iconColor: 'text-indigo-600',
+      textHighlight: 'text-indigo-700',
+      chipActive: 'bg-indigo-600 text-white border-indigo-600',
+      actionBtnClass: 'bg-indigo-600 hover:bg-indigo-700',
     },
     declined: {
       label: '去唔到',
@@ -40,6 +50,11 @@ export const SelectMemberModal: React.FC<SelectMemberModalProps> = ({
       badgeClass: 'bg-rose-100 text-rose-800 border-rose-300',
       btnHover: 'hover:bg-rose-50 hover:border-rose-500 hover:text-rose-600',
       btnSelected: 'bg-rose-600 text-white border-rose-600',
+      themeBg: 'bg-rose-50/70 border-rose-200',
+      iconColor: 'text-rose-600',
+      textHighlight: 'text-rose-700',
+      chipActive: 'bg-rose-600 text-white border-rose-600',
+      actionBtnClass: 'bg-rose-600 hover:bg-rose-700',
     },
     tbc: {
       label: 'TBC',
@@ -47,33 +62,39 @@ export const SelectMemberModal: React.FC<SelectMemberModalProps> = ({
       badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
       btnHover: 'hover:bg-amber-50 hover:border-amber-500 hover:text-amber-700',
       btnSelected: 'bg-amber-500 text-white border-amber-500',
+      themeBg: 'bg-amber-50/70 border-amber-200',
+      iconColor: 'text-amber-600',
+      textHighlight: 'text-amber-700',
+      chipActive: 'bg-amber-500 text-white border-amber-500',
+      actionBtnClass: 'bg-amber-600 hover:bg-amber-700',
     },
   }[choice];
 
   const Icon = choiceConfig.icon;
   const isLateEarly = choice === 'late_early';
+  const isDeclined = choice === 'declined';
+  const isTBC = choice === 'tbc';
+  const allowsRemark = true; // 所有選項皆可填寫 Remark（尤其是遲到早退、去唔到、TBC）
 
-  const quickRemarks = [
-    '遲30分鐘',
-    '遲15分鐘',
-    '14:00到',
-    '早退1小時',
-    '17:00早走',
-    '需早走',
-  ];
+  // Custom quick chips depending on choice
+  const quickRemarks = isLateEarly
+    ? ['遲30分鐘', '遲15分鐘', '14:00到', '早退1小時', '17:00早走', '需早走']
+    : isDeclined
+    ? ['要返工', '唔喺香港', '有事出席唔到', '輪值撞期', '身體不適', '家庭聚會']
+    : isTBC
+    ? ['未知得唔得', '睇下時間', '晚啲覆', '視乎工作', '未定機票', '遲啲確定']
+    : ['準時到', '早到幫手'];
+
+  const placeholderText = isLateEarly
+    ? '請輸入備註（例如：遲30分鐘 / 14:00到 / 17:00走）'
+    : isDeclined
+    ? '可填寫原因（例如：要返工 / 唔喺香港 / 有事）'
+    : isTBC
+    ? '可填寫原因或時間（例如：未知得唔得 / 晚啲覆 / 睇下時間）'
+    : '可填寫自訂備註（會顯示於名字後）';
 
   const handleMemberClick = (name: string) => {
-    if (isLateEarly) {
-      // For late_early, select the member to let them confirm or add remark
-      setSelectedMember(name);
-    } else {
-      // For others, if no remark was typed, submit immediately
-      if (!remark.trim()) {
-        onSelect(name, undefined);
-      } else {
-        setSelectedMember(name);
-      }
-    }
+    setSelectedMember(name);
   };
 
   const handleConfirmSubmit = () => {
@@ -110,21 +131,26 @@ export const SelectMemberModal: React.FC<SelectMemberModalProps> = ({
 
         {/* Prompt Body */}
         <div className="p-5 overflow-y-auto space-y-4">
-          {/* Remark Input Section (Prominent especially for 遲到早退) */}
-          <div className={`p-3.5 rounded-2xl border ${isLateEarly ? 'bg-indigo-50/60 border-indigo-200' : 'bg-slate-50 border-slate-200'} space-y-2`}>
+          {/* Remark Input Section */}
+          <div className={`p-3.5 rounded-2xl border ${choiceConfig.themeBg} space-y-2`}>
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
-                <span>自訂備註 Remark {isLateEarly && <span className="text-indigo-600 font-extrabold">（加字顯示於名後）</span>}</span>
+                <MessageSquare className={`w-3.5 h-3.5 ${choiceConfig.iconColor}`} />
+                <span>
+                  自訂備註 Remark{' '}
+                  <span className={`font-extrabold ${choiceConfig.textHighlight}`}>
+                    （會顯示於名字後方）
+                  </span>
+                </span>
               </label>
             </div>
 
             <input
               type="text"
-              placeholder={isLateEarly ? '請輸入備註（例如：遲30分鐘 / 14:00到 / 17:00走）' : '可選填備註（會顯示於名字後）'}
+              placeholder={placeholderText}
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
             />
 
             {/* Quick chips for remark */}
@@ -136,8 +162,8 @@ export const SelectMemberModal: React.FC<SelectMemberModalProps> = ({
                   onClick={() => setRemark(q)}
                   className={`text-[11px] px-2 py-0.5 rounded-lg border transition-colors cursor-pointer ${
                     remark === q
-                      ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                      ? `${choiceConfig.chipActive} font-bold`
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
                   }`}
                 >
                   {q}
@@ -158,9 +184,7 @@ export const SelectMemberModal: React.FC<SelectMemberModalProps> = ({
           {/* Member Selection */}
           <div className="space-y-2">
             <p className="text-xs font-bold text-slate-700">
-              {isLateEarly || remark
-                ? '請選擇你的社員名字，然後點擊確認登記：'
-                : '請問你係邊位社員？（點擊名字即可完成登記）：'}
+              請選擇你的社員名字，然後點擊確認登記：
             </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -195,18 +219,16 @@ export const SelectMemberModal: React.FC<SelectMemberModalProps> = ({
             取消
           </button>
 
-          {(isLateEarly || selectedMember) && (
-            <button
-              type="button"
-              disabled={!selectedMember}
-              onClick={handleConfirmSubmit}
-              className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors cursor-pointer"
-            >
-              {selectedMember
-                ? `確認以「${selectedMember}」登記${remark ? ` (${remark})` : ''}`
-                : '請先點選名字'}
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={!selectedMember}
+            onClick={handleConfirmSubmit}
+            className={`px-5 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors cursor-pointer ${choiceConfig.actionBtnClass}`}
+          >
+            {selectedMember
+              ? `確認以「${selectedMember}」登記${remark ? ` (${remark})` : ''}`
+              : '請先點選名字'}
+          </button>
         </div>
       </div>
     </div>

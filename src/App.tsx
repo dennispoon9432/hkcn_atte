@@ -216,12 +216,12 @@ export default function App() {
 
     const label =
       choice === 'attending'
-        ? '去到 ✅'
+        ? `去到 ✅${remark ? ` (${remark})` : ''}`
+        : choice === 'late_early'
+        ? `遲到早退 ⏱️${remark ? ` (${remark})` : ''}`
         : choice === 'declined'
-        ? '去唔到 ❌'
-        : choice === 'tbc'
-        ? 'TBC ⏳'
-        : `遲到早退 ⏱️${remark ? ` (${remark})` : ''}`;
+        ? `去唔到 ❌${remark ? ` (${remark})` : ''}`
+        : `TBC ⏳${remark ? ` (${remark})` : ''}`;
 
     // Add system log entry
     StorageService.addLog({
@@ -539,10 +539,10 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 3. 4 RSVP Buttons (遲到早退放最尾: 去到 -> 去唔到 -> TBC -> 遲到早退) */}
+                {/* 3. 4 RSVP Buttons (順序: 1.去到 -> 2.遲到早退 -> 3.去唔到 -> 4.TBC) */}
                 <div className="p-4 sm:p-5 bg-slate-50/70 border-b border-slate-100 space-y-2">
                   <div className="text-[11px] font-bold text-slate-500">
-                    點擊你的出席狀態（點擊後選擇你的名字，可加填 Remark）：
+                    點擊你的出席狀態（點擊後選擇你的名字，可加填 Remark 備註）：
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -556,7 +556,17 @@ export default function App() {
                       <span>去到</span>
                     </button>
 
-                    {/* 2. 去唔到 */}
+                    {/* 2. 遲到早退 (第2位) */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRSVPPrompt(evt, 'late_early')}
+                      className="py-2.5 px-2 rounded-2xl bg-white border border-indigo-300 text-indigo-900 hover:bg-indigo-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                    >
+                      <Timer className="w-4 h-4 text-indigo-600" />
+                      <span>遲到早退</span>
+                    </button>
+
+                    {/* 3. 去唔到 */}
                     <button
                       type="button"
                       onClick={() => handleOpenRSVPPrompt(evt, 'declined')}
@@ -566,7 +576,7 @@ export default function App() {
                       <span>去唔到</span>
                     </button>
 
-                    {/* 3. TBC */}
+                    {/* 4. TBC */}
                     <button
                       type="button"
                       onClick={() => handleOpenRSVPPrompt(evt, 'tbc')}
@@ -575,22 +585,12 @@ export default function App() {
                       <Clock className="w-4 h-4 text-amber-500" />
                       <span>TBC</span>
                     </button>
-
-                    {/* 4. 遲到早退 (放到最尾) */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenRSVPPrompt(evt, 'late_early')}
-                      className="py-2.5 px-2 rounded-2xl bg-white border border-indigo-300 text-indigo-900 hover:bg-indigo-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                    >
-                      <Timer className="w-4 h-4 text-indigo-600" />
-                      <span>遲到早退</span>
-                    </button>
                   </div>
                 </div>
 
-                {/* 4. Attendance Breakdown (順序: 去到 -> 去唔到 -> TBC -> 遲到早退) */}
+                {/* 4. Attendance Breakdown (順序: 1.去到 -> 2.遲到早退 -> 3.去唔到 -> 4.TBC) */}
                 <div className="p-4 sm:p-5 space-y-3 text-xs">
-                  {/* 去到 */}
+                  {/* 1. 去到 */}
                   <div className="flex items-start gap-2.5">
                     <span className="px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 font-bold shrink-0 text-[11px]">
                       去到 ({attendingList.length})
@@ -614,55 +614,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 去唔到 */}
-                  <div className="flex items-start gap-2.5">
-                    <span className="px-2.5 py-0.5 rounded-lg bg-rose-100 text-rose-900 font-bold shrink-0 text-[11px]">
-                      去唔到 ({declinedList.length})
-                    </span>
-                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
-                      {declinedList.length > 0 ? (
-                        declinedList.map((m, i) => (
-                          <span key={m} className="inline-flex items-center gap-0.5">
-                            <span>{m}</span>
-                            {evt.remarks?.[m] && (
-                              <span className="text-[10px] text-rose-700 font-semibold bg-rose-50 px-1 py-0.2 rounded border border-rose-200">
-                                ({evt.remarks[m]})
-                              </span>
-                            )}
-                            {i < declinedList.length - 1 && <span>、</span>}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-slate-400">暫無</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* TBC */}
-                  <div className="flex items-start gap-2.5">
-                    <span className="px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-900 font-bold shrink-0 text-[11px]">
-                      TBC ({tbcList.length})
-                    </span>
-                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
-                      {tbcList.length > 0 ? (
-                        tbcList.map((m, i) => (
-                          <span key={m} className="inline-flex items-center gap-0.5">
-                            <span>{m}</span>
-                            {evt.remarks?.[m] && (
-                              <span className="text-[10px] text-amber-800 font-semibold bg-amber-50 px-1 py-0.2 rounded border border-amber-200">
-                                ({evt.remarks[m]})
-                              </span>
-                            )}
-                            {i < tbcList.length - 1 && <span>、</span>}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-slate-400">暫無</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 遲到早退 (放到最尾) */}
+                  {/* 2. 遲到早退 (第2位) */}
                   <div className="flex items-start gap-2.5">
                     <span className="px-2.5 py-0.5 rounded-lg bg-indigo-100 text-indigo-900 font-bold shrink-0 text-[11px]">
                       遲到早退 ({lateEarlyList.length})
@@ -670,14 +622,77 @@ export default function App() {
                     <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
                       {lateEarlyList.length > 0 ? (
                         lateEarlyList.map((m, i) => (
-                          <span key={m} className="inline-flex items-center gap-1 bg-indigo-50/80 text-indigo-950 px-2 py-0.5 rounded-lg border border-indigo-200">
+                          <span
+                            key={m}
+                            className="inline-flex items-center gap-1 bg-indigo-50/80 text-indigo-950 px-2 py-0.5 rounded-lg border border-indigo-200"
+                          >
                             <span className="font-bold">{m}</span>
                             {evt.remarks?.[m] && (
                               <span className="text-[10px] text-indigo-700 font-bold bg-white px-1.5 py-0.2 rounded border border-indigo-100 shadow-2xs">
                                 {evt.remarks[m]}
                               </span>
                             )}
-                            {i < lateEarlyList.length - 1 && <span className="text-indigo-300 ml-1">·</span>}
+                            {i < lateEarlyList.length - 1 && (
+                              <span className="text-indigo-300 ml-1">·</span>
+                            )}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400">暫無</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 3. 去唔到 (可顯示自訂 Remark 原因) */}
+                  <div className="flex items-start gap-2.5">
+                    <span className="px-2.5 py-0.5 rounded-lg bg-rose-100 text-rose-900 font-bold shrink-0 text-[11px]">
+                      去唔到 ({declinedList.length})
+                    </span>
+                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
+                      {declinedList.length > 0 ? (
+                        declinedList.map((m, i) => (
+                          <span
+                            key={m}
+                            className="inline-flex items-center gap-1 bg-rose-50/80 text-rose-950 px-2 py-0.5 rounded-lg border border-rose-200"
+                          >
+                            <span className="font-bold">{m}</span>
+                            {evt.remarks?.[m] && (
+                              <span className="text-[10px] text-rose-700 font-bold bg-white px-1.5 py-0.2 rounded border border-rose-100 shadow-2xs">
+                                {evt.remarks[m]}
+                              </span>
+                            )}
+                            {i < declinedList.length - 1 && (
+                              <span className="text-rose-300 ml-1">·</span>
+                            )}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400">暫無</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4. TBC (可顯示自訂 Remark) */}
+                  <div className="flex items-start gap-2.5">
+                    <span className="px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-900 font-bold shrink-0 text-[11px]">
+                      TBC ({tbcList.length})
+                    </span>
+                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
+                      {tbcList.length > 0 ? (
+                        tbcList.map((m, i) => (
+                          <span
+                            key={m}
+                            className="inline-flex items-center gap-1 bg-amber-50/80 text-amber-950 px-2 py-0.5 rounded-lg border border-amber-200"
+                          >
+                            <span className="font-bold">{m}</span>
+                            {evt.remarks?.[m] && (
+                              <span className="text-[10px] text-amber-800 font-bold bg-white px-1.5 py-0.2 rounded border border-amber-100 shadow-2xs">
+                                {evt.remarks[m]}
+                              </span>
+                            )}
+                            {i < tbcList.length - 1 && (
+                              <span className="text-amber-300 ml-1">·</span>
+                            )}
                           </span>
                         ))
                       ) : (
