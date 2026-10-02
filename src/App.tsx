@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { SimpleEvent, AttendanceChoice } from './types';
+import { SimpleEvent, AttendanceChoice, SystemLogEntry } from './types';
 import { StorageService } from './services/storage';
 import {
   CORE_MEMBERS,
@@ -11,6 +11,7 @@ import { EditEventModal } from './components/EditEventModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SelectMemberModal } from './components/SelectMemberModal';
 import { GoogleSheetSyncModal } from './components/GoogleSheetSyncModal';
+import { SystemLogModal } from './components/SystemLogModal';
 import { AccessGate } from './components/AccessGate';
 import { BrandLogo } from './components/BrandLogo';
 import {
@@ -27,13 +28,17 @@ import {
   GripVertical,
   ChevronUp,
   ChevronDown,
+  Timer,
+  History,
 } from 'lucide-react';
 
 export default function App() {
   const [authorized, setAuthorized] = useState<boolean>(() => StorageService.isAuthValid());
   const [events, setEvents] = useState<SimpleEvent[]>(() => StorageService.getEvents());
+  const [logs, setLogs] = useState<SystemLogEntry[]>(() => StorageService.getLogs());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSheetModal, setShowSheetModal] = useState(false);
+  const [showLogModal, setShowLogModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<SimpleEvent | null>(null);
   const [deletingEvent, setDeletingEvent] = useState<SimpleEvent | null>(null);
   const [pendingRSVP, setPendingRSVP] = useState<{
@@ -98,6 +103,15 @@ export default function App() {
     setEvents(updated);
     StorageService.saveEvents(updated);
     StorageService.pushAllEventsToGoogleSheet(updated);
+
+    // Add log
+    StorageService.addLog({
+      actionType: 'reorder',
+      title: '調整活動排位',
+      detail: `將「${moved.title}」排位調整至第 ${toIndex + 1} 位`,
+    });
+    setLogs(StorageService.getLogs());
+
     showToast('已更新活動排列次序！');
   };
 
@@ -166,19 +180,27 @@ export default function App() {
     setPendingRSVP({ event, choice });
   };
 
-  // When choosing who they are in the prompt
-  const handleConfirmMemberRSVP = async (memberName: string) => {
+  // When choosing who they are and entering an optional remark
+  const handleConfirmMemberRSVP = async (memberName: string, remark?: string) => {
     if (!pendingRSVP) return;
     const { event, choice } = pendingRSVP;
 
     const updated = events.map((e) => {
       if (e.id !== event.id) return e;
+      const newAttendance = {
+        ...e.attendance,
+        [memberName]: choice,
+      };
+      const newRemarks = { ...(e.remarks || {}) };
+      if (remark) {
+        newRemarks[memberName] = remark;
+      } else {
+        delete newRemarks[memberName];
+      }
       return {
         ...e,
-        attendance: {
-          ...e.attendance,
-          [memberName]: choice,
-        },
+        attendance: newAttendance,
+        remarks: newRemarks,
       };
     });
 
@@ -187,11 +209,28 @@ export default function App() {
 
     // Push to Google Sheet immediately
     StorageService.pushAllEventsToGoogleSheet(updated);
-    StorageService.pushRSVP(event.title, memberName, choice, updated);
+    StorageService.pushRSVP(event.title, memberName, choice, remark, updated);
 
     setPendingRSVP(null);
 
-    const label = choice === 'attending' ? '去到 ✅' : choice === 'declined' ? '去唔到 ❌' : 'TBC ⏳';
+    const label =
+      choice === 'attending'
+        ? '去到 ✅'
+        : choice === 'declined'
+        ? '去唔到 ❌'
+        : choice === 'tbc'
+        ? 'TBC ⏳'
+        : `遲到早退 ⏱️${remark ? ` (${remark})` : ''}`;
+
+    // Add system log entry
+    StorageService.addLog({
+      actionType: 'rsvp',
+      title: '出席登記改動',
+      memberName,
+      detail: `${memberName} 於「${event.title}」登記出席狀態為：${label}`,
+    });
+    setLogs(StorageService.getLogs());
+
     showToast(`${memberName} 已成功登記：${label}`);
   };
 
@@ -201,6 +240,7 @@ export default function App() {
       title,
       dateTime,
       attendance: {},
+      remarks: {},
       createdAt: new Date().toISOString(),
     };
     const updated = [newEvent, ...events];
@@ -210,11 +250,20 @@ export default function App() {
     // Push to Google Sheet
     StorageService.pushAllEventsToGoogleSheet(updated);
 
+    // Add log
+    StorageService.addLog({
+      actionType: 'create',
+      title: '新增活動',
+      detail: `成功建立活動「${title}」（時間：${dateTime}）`,
+    });
+    setLogs(StorageService.getLogs());
+
     setShowCreateModal(false);
     showToast('已新增活動並同步至 Google Sheet！');
   };
 
   const handleSaveEditEvent = (id: string, title: string, dateTime: string) => {
+    const existing = events.find((e) => e.id === id);
     const updated = events.map((e) => (e.id === id ? { ...e, title, dateTime } : e));
     setEvents(updated);
     StorageService.saveEvents(updated);
@@ -222,17 +271,34 @@ export default function App() {
     // Push to Google Sheet
     StorageService.pushAllEventsToGoogleSheet(updated);
 
+    // Add log
+    StorageService.addLog({
+      actionType: 'edit',
+      title: '修改活動資料',
+      detail: `修改活動「${existing?.title || title}」之資料為：「${title}」（時間：${dateTime}）`,
+    });
+    setLogs(StorageService.getLogs());
+
     setEditingEvent(null);
     showToast('已更新活動並同步至 Google Sheet！');
   };
 
   const handleConfirmDelete = (id: string) => {
+    const toDelete = events.find((e) => e.id === id);
     const updated = events.filter((e) => e.id !== id);
     setEvents(updated);
     StorageService.saveEvents(updated);
 
     // Push to Google Sheet
     StorageService.pushAllEventsToGoogleSheet(updated);
+
+    // Add log
+    StorageService.addLog({
+      actionType: 'delete',
+      title: '刪除活動',
+      detail: `輸入 HKCN 確認刪除活動「${toDelete?.title || id}」`,
+    });
+    setLogs(StorageService.getLogs());
 
     setDeletingEvent(null);
     showToast('已成功刪除活動');
@@ -304,8 +370,19 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Action: Google Sheet, Copy Secret Link, Add Event */}
+          {/* Right Action: Logs, Google Sheet, Copy Secret Link, Add Event */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* System Log Button */}
+            <button
+              onClick={() => setShowLogModal(true)}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="查看系統操作紀錄 (改動歷程)"
+            >
+              <History className="w-3.5 h-3.5 text-purple-600" />
+              <span className="hidden sm:inline">操作紀錄</span>
+            </button>
+
+            {/* Google Sheet Button */}
             <button
               onClick={() => setShowSheetModal(true)}
               className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -360,6 +437,8 @@ export default function App() {
             const tbcList = CORE_MEMBERS.filter(
               (m) => evt.attendance[m] === 'tbc' || !evt.attendance[m]
             );
+            // 遲到早退放在最尾
+            const lateEarlyList = CORE_MEMBERS.filter((m) => evt.attendance[m] === 'late_early');
 
             const isBeingDragged = draggedIndex === index;
             const isDragOver = dragOverIndex === index && draggedIndex !== index;
@@ -459,56 +538,78 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 3. 3 RSVP Buttons: 去到 / 去唔到 / TBC */}
+                {/* 3. 4 RSVP Buttons (遲到早退放最尾: 去到 -> 去唔到 -> TBC -> 遲到早退) */}
                 <div className="p-4 sm:p-5 bg-slate-50/70 border-b border-slate-100 space-y-2">
                   <div className="text-[11px] font-bold text-slate-500">
-                    點擊你的出席狀態（點擊後會彈出選擇你的名字）：
+                    點擊你的出席狀態（點擊後選擇你的名字，可加填 Remark）：
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
-                    {/* 去到 */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {/* 1. 去到 */}
                     <button
                       type="button"
                       onClick={() => handleOpenRSVPPrompt(evt, 'attending')}
-                      className="py-3 px-2 rounded-2xl bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                      className="py-2.5 px-2 rounded-2xl bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
                     >
                       <CheckCircle2 className="w-4 h-4 text-[#00A651]" />
                       <span>去到</span>
                     </button>
 
-                    {/* 去唔到 */}
+                    {/* 2. 去唔到 */}
                     <button
                       type="button"
                       onClick={() => handleOpenRSVPPrompt(evt, 'declined')}
-                      className="py-3 px-2 rounded-2xl bg-white border border-rose-300 text-rose-800 hover:bg-rose-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                      className="py-2.5 px-2 rounded-2xl bg-white border border-rose-300 text-rose-800 hover:bg-rose-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
                     >
                       <XCircle className="w-4 h-4 text-rose-600" />
                       <span>去唔到</span>
                     </button>
 
-                    {/* TBC */}
+                    {/* 3. TBC */}
                     <button
                       type="button"
                       onClick={() => handleOpenRSVPPrompt(evt, 'tbc')}
-                      className="py-3 px-2 rounded-2xl bg-white border border-amber-300 text-amber-800 hover:bg-amber-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                      className="py-2.5 px-2 rounded-2xl bg-white border border-amber-300 text-amber-800 hover:bg-amber-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
                     >
                       <Clock className="w-4 h-4 text-amber-500" />
                       <span>TBC</span>
                     </button>
+
+                    {/* 4. 遲到早退 (放到最尾) */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRSVPPrompt(evt, 'late_early')}
+                      className="py-2.5 px-2 rounded-2xl bg-white border border-indigo-300 text-indigo-900 hover:bg-indigo-50 active:scale-95 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                    >
+                      <Timer className="w-4 h-4 text-indigo-600" />
+                      <span>遲到早退</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* 4. Attendance Breakdown (去到 / 去唔到 / TBC) */}
+                {/* 4. Attendance Breakdown (順序: 去到 -> 去唔到 -> TBC -> 遲到早退) */}
                 <div className="p-4 sm:p-5 space-y-3 text-xs">
                   {/* 去到 */}
                   <div className="flex items-start gap-2.5">
                     <span className="px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 font-bold shrink-0 text-[11px]">
                       去到 ({attendingList.length})
                     </span>
-                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed">
-                      {attendingList.length > 0
-                        ? attendingList.join('、')
-                        : <span className="text-slate-400">暫無</span>}
+                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
+                      {attendingList.length > 0 ? (
+                        attendingList.map((m, i) => (
+                          <span key={m} className="inline-flex items-center gap-0.5">
+                            <span>{m}</span>
+                            {evt.remarks?.[m] && (
+                              <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                                ({evt.remarks[m]})
+                              </span>
+                            )}
+                            {i < attendingList.length - 1 && <span>、</span>}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400">暫無</span>
+                      )}
                     </div>
                   </div>
 
@@ -517,10 +618,22 @@ export default function App() {
                     <span className="px-2.5 py-0.5 rounded-lg bg-rose-100 text-rose-900 font-bold shrink-0 text-[11px]">
                       去唔到 ({declinedList.length})
                     </span>
-                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed">
-                      {declinedList.length > 0
-                        ? declinedList.join('、')
-                        : <span className="text-slate-400">暫無</span>}
+                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
+                      {declinedList.length > 0 ? (
+                        declinedList.map((m, i) => (
+                          <span key={m} className="inline-flex items-center gap-0.5">
+                            <span>{m}</span>
+                            {evt.remarks?.[m] && (
+                              <span className="text-[10px] text-rose-700 font-semibold bg-rose-50 px-1 py-0.2 rounded border border-rose-200">
+                                ({evt.remarks[m]})
+                              </span>
+                            )}
+                            {i < declinedList.length - 1 && <span>、</span>}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400">暫無</span>
+                      )}
                     </div>
                   </div>
 
@@ -529,10 +642,46 @@ export default function App() {
                     <span className="px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-900 font-bold shrink-0 text-[11px]">
                       TBC ({tbcList.length})
                     </span>
-                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed">
-                      {tbcList.length > 0
-                        ? tbcList.join('、')
-                        : <span className="text-slate-400">暫無</span>}
+                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
+                      {tbcList.length > 0 ? (
+                        tbcList.map((m, i) => (
+                          <span key={m} className="inline-flex items-center gap-0.5">
+                            <span>{m}</span>
+                            {evt.remarks?.[m] && (
+                              <span className="text-[10px] text-amber-800 font-semibold bg-amber-50 px-1 py-0.2 rounded border border-amber-200">
+                                ({evt.remarks[m]})
+                              </span>
+                            )}
+                            {i < tbcList.length - 1 && <span>、</span>}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400">暫無</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 遲到早退 (放到最尾) */}
+                  <div className="flex items-start gap-2.5">
+                    <span className="px-2.5 py-0.5 rounded-lg bg-indigo-100 text-indigo-900 font-bold shrink-0 text-[11px]">
+                      遲到早退 ({lateEarlyList.length})
+                    </span>
+                    <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
+                      {lateEarlyList.length > 0 ? (
+                        lateEarlyList.map((m, i) => (
+                          <span key={m} className="inline-flex items-center gap-1 bg-indigo-50/80 text-indigo-950 px-2 py-0.5 rounded-lg border border-indigo-200">
+                            <span className="font-bold">{m}</span>
+                            {evt.remarks?.[m] && (
+                              <span className="text-[10px] text-indigo-700 font-bold bg-white px-1.5 py-0.2 rounded border border-indigo-100 shadow-2xs">
+                                {evt.remarks[m]}
+                              </span>
+                            )}
+                            {i < lateEarlyList.length - 1 && <span className="text-indigo-300 ml-1">·</span>}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400">暫無</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -568,7 +717,7 @@ export default function App() {
         />
       )}
 
-      {/* Select Member Prompt (Opens whenever user presses 去到/去唔到/TBC) */}
+      {/* Select Member Prompt (Opens whenever user presses 去到/去唔到/TBC/遲到早退) */}
       {pendingRSVP && (
         <SelectMemberModal
           eventTitle={pendingRSVP.event.title}
@@ -583,6 +732,18 @@ export default function App() {
         <GoogleSheetSyncModal
           onClose={() => setShowSheetModal(false)}
           onSyncNow={() => syncData(true)}
+        />
+      )}
+
+      {/* System Log Modal (View activity / changes history) */}
+      {showLogModal && (
+        <SystemLogModal
+          logs={logs}
+          onClearLogs={() => {
+            StorageService.clearLogs();
+            setLogs([]);
+          }}
+          onClose={() => setShowLogModal(false)}
         />
       )}
     </div>

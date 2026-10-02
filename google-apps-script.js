@@ -5,8 +5,8 @@
 
 function doGet(e) {
   var sheet = getOrCreateSheet();
-  
-  // 支援透過 GET 參數進行備份寫入（防止某些瀏覽器阻擋 POST）
+
+  // 支援透過 GET 參數進行備份寫入
   if (e && e.parameter && e.parameter.action === 'sync_all' && e.parameter.data) {
     try {
       var events = JSON.parse(e.parameter.data);
@@ -17,7 +17,7 @@ function doGet(e) {
     }
   }
 
-  // 預設：讀取所有活動與出席數據
+  // 讀取所有活動與出席數據
   var data = sheet.getDataRange().getValues();
   var events = [];
 
@@ -29,13 +29,21 @@ function doGet(e) {
     var title = String(row[1] || '');
     var dateTime = String(row[2] || '');
     var attendance = {};
+    var remarks = {};
 
     try {
       if (row[3]) {
-        attendance = JSON.parse(String(row[3]));
+        var parsed = JSON.parse(String(row[3]));
+        if (parsed.attendance) {
+          attendance = parsed.attendance;
+          remarks = parsed.remarks || {};
+        } else {
+          attendance = parsed;
+        }
       }
     } catch (err) {
       attendance = {};
+      remarks = {};
     }
 
     events.push({
@@ -43,6 +51,7 @@ function doGet(e) {
       title: title,
       dateTime: dateTime,
       attendance: attendance,
+      remarks: remarks,
       createdAt: row[4] ? String(row[4]) : new Date().toISOString()
     });
   }
@@ -74,22 +83,36 @@ function doPost(e) {
       var eventTitle = payload.eventTitle;
       var memberName = payload.memberName;
       var choice = payload.choice;
+      var remark = payload.remark;
 
       var data = sheet.getDataRange().getValues();
       var found = false;
       for (var i = 1; i < data.length; i++) {
         if (data[i][1] === eventTitle || data[i][0] === payload.eventId) {
           var attendance = {};
+          var remarks = {};
           try {
-            attendance = JSON.parse(data[i][3] || '{}');
+            var parsed = JSON.parse(data[i][3] || '{}');
+            if (parsed.attendance) {
+              attendance = parsed.attendance;
+              remarks = parsed.remarks || {};
+            } else {
+              attendance = parsed;
+            }
           } catch (err) {}
 
           attendance[memberName] = choice;
+          if (remark) {
+            remarks[memberName] = remark;
+          } else {
+            delete remarks[memberName];
+          }
 
-          sheet.getRange(i + 1, 4).setValue(JSON.stringify(attendance));
-          sheet.getRange(i + 1, 6).setValue(getSummaryText(attendance, 'attending'));
-          sheet.getRange(i + 1, 7).setValue(getSummaryText(attendance, 'declined'));
-          sheet.getRange(i + 1, 8).setValue(getSummaryText(attendance, 'tbc'));
+          sheet.getRange(i + 1, 4).setValue(JSON.stringify({ attendance: attendance, remarks: remarks }));
+          sheet.getRange(i + 1, 6).setValue(getSummaryText(attendance, remarks, 'attending'));
+          sheet.getRange(i + 1, 7).setValue(getSummaryText(attendance, remarks, 'late_early'));
+          sheet.getRange(i + 1, 8).setValue(getSummaryText(attendance, remarks, 'declined'));
+          sheet.getRange(i + 1, 9).setValue(getSummaryText(attendance, remarks, 'tbc'));
           found = true;
           break;
         }
@@ -117,19 +140,27 @@ function writeAllEvents(sheet, events) {
   var rows = [];
   for (var i = 0; i < events.length; i++) {
     var evt = events[i];
+    var attendance = evt.attendance || {};
+    var remarks = evt.remarks || {};
+    var payloadObj = {
+      attendance: attendance,
+      remarks: remarks
+    };
+
     rows.push([
       evt.id || 'evt-' + i,
       evt.title,
       evt.dateTime,
-      JSON.stringify(evt.attendance || {}),
+      JSON.stringify(payloadObj),
       evt.createdAt || new Date().toISOString(),
-      getSummaryText(evt.attendance, 'attending'),
-      getSummaryText(evt.attendance, 'declined'),
-      getSummaryText(evt.attendance, 'tbc')
+      getSummaryText(attendance, remarks, 'attending'),
+      getSummaryText(attendance, remarks, 'late_early'),
+      getSummaryText(attendance, remarks, 'declined'),
+      getSummaryText(attendance, remarks, 'tbc')
     ]);
   }
 
-  sheet.getRange(2, 1, rows.length, 8).setValues(rows);
+  sheet.getRange(2, 1, rows.length, 9).setValues(rows);
 }
 
 function getOrCreateSheet() {
@@ -153,6 +184,7 @@ function setupHeaders(sheet) {
     '出席名冊數據 (JSON)',
     '建立時間 (CreatedAt)',
     '去到名單 (Attending)',
+    '遲到早退名單 (Late/Early)',
     '去唔到名單 (Declined)',
     'TBC名單 (TBC)'
   ];
@@ -161,12 +193,16 @@ function setupHeaders(sheet) {
   sheet.setFrozenRows(1);
 }
 
-function getSummaryText(attendance, choice) {
+function getSummaryText(attendance, remarks, choice) {
   if (!attendance) return '';
   var list = [];
   for (var k in attendance) {
     if (attendance[k] === choice) {
-      list.push(k);
+      if (remarks && remarks[k]) {
+        list.push(k + ' (' + remarks[k] + ')');
+      } else {
+        list.push(k);
+      }
     }
   }
   return list.join(', ');
