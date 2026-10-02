@@ -1,19 +1,14 @@
-# 香港城北扶青社 - 活動出席登記系統
-**Rotaract Club of Hong Kong City North - Attendance & Event System**
+# 香港城北扶青社 - 極簡活動出席登記系統
+**Rotaract Club of Hong Kong City North - Simple Attendance**
 
-專為香港城北扶青社設計的活動出席與報名管理系統，支援免密碼專屬連結一鍵簽到、實時人數統計及 WhatsApp 報名格式一鍵複製。
+專為香港城北扶青社設計的極簡出席系統，純前端運行，零後端 API。
 
-## 🌟 核心功能
-- **免密碼專屬連結 (Secret Link)**：社員於 WhatsApp 點擊內嵌 Token 連結即可直接自動登入，無需記密碼。
-- **13位核心社員名冊**：已內置 Cherry、Paris、Onki、Henry、Alvin、Rio、Rainbow、Kellie、Winston、Jack、Mimi、Timmy、Jill。
-- **一鍵個人簽到**：選擇本人姓名後，可一鍵登記「出席」、「未能出席」或「待定」，並可填寫備註。
-- **WhatsApp 格式一鍵複製**：自動生成過往常用的報名及出席名單格式，方便幹事貼回群組。
-- **實時雲端同步與備份**：後端實時同步出席數據，支援下載 JSON 及 Excel (CSV) 數據備份。
+## 🌟 核心設計
+1. **極度簡化**：只保留「新增活動」（名稱 + 日期時間）。
+2. **只有 3 個選項**：每個活動只有「去到」、「去唔到」、「TBC」。
+3. **專屬 WhatsApp 連結保護**：非公開系統，僅限帶有專屬密鑰的連結 (`?key=hkcn2026`) 才能存取。
+4. **Google Sheets 整合**：預設連接指定 Google Sheet，無須手動配置。
+5. **WhatsApp 格式一鍵複製**：方便幹事將名單直接複製貼回 WhatsApp 群組。
 
-## 🚀 本地開發與運行
-```bash
-npm install
-npm run dev
-```
-
-開發伺服器運行於 `http://localhost:3000`。
+## 👥 13位固定社員
+Cherry、Paris、Onki、Henry、Alvin、Rio、Rainbow、Kellie、Winston、Jack、Mimi、Timmy、Jill
