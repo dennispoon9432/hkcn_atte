@@ -598,14 +598,19 @@ export default function App() {
                     <div className="text-slate-800 font-medium pt-0.5 leading-relaxed flex flex-wrap items-center gap-1.5">
                       {attendingList.length > 0 ? (
                         attendingList.map((m, i) => (
-                          <span key={m} className="inline-flex items-center gap-0.5">
-                            <span>{m}</span>
+                          <span
+                            key={m}
+                            className="inline-flex items-center gap-1 bg-emerald-50/80 text-emerald-950 px-2 py-0.5 rounded-lg border border-emerald-200"
+                          >
+                            <span className="font-bold">{m}</span>
                             {evt.remarks?.[m] && (
-                              <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
-                                ({evt.remarks[m]})
+                              <span className="text-[10px] text-emerald-700 font-bold bg-white px-1.5 py-0.2 rounded border border-emerald-100 shadow-2xs">
+                                {evt.remarks[m]}
                               </span>
                             )}
-                            {i < attendingList.length - 1 && <span>、</span>}
+                            {i < attendingList.length - 1 && (
+                              <span className="text-emerald-300 ml-1">·</span>
+                            )}
                           </span>
                         ))
                       ) : (
@@ -755,10 +760,6 @@ export default function App() {
       {showLogModal && (
         <SystemLogModal
           logs={logs}
-          onClearLogs={() => {
-            StorageService.clearLogs();
-            setLogs([]);
-          }}
           onClose={() => setShowLogModal(false)}
         />
       )}

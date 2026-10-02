@@ -14,13 +14,11 @@ import { SystemLogEntry } from '../types';
 
 interface SystemLogModalProps {
   logs: SystemLogEntry[];
-  onClearLogs: () => void;
   onClose: () => void;
 }
 
 export const SystemLogModal: React.FC<SystemLogModalProps> = ({
   logs,
-  onClearLogs,
   onClose,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -172,21 +170,6 @@ export const SystemLogModal: React.FC<SystemLogModalProps> = ({
                 活動管理
               </button>
             </div>
-
-            {logs.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('確定要清空所有操作紀錄嗎？')) {
-                    onClearLogs();
-                  }
-                }}
-                className="text-[11px] text-rose-500 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
-              >
-                <Trash2 className="w-3 h-3" />
-                <span>清空紀錄</span>
-              </button>
-            )}
           </div>
         </div>
 
