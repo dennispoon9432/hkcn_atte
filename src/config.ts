@@ -9,8 +9,9 @@ export const HARDCODED_GOOGLE_SHEET_ID = '1u75_qNf62abyiimp4jut26QVM2a2g7G-8bCUw
 // Google Sheet 網址
 export const GOOGLE_SHEET_URL = `https://docs.google.com/spreadsheets/d/${HARDCODED_GOOGLE_SHEET_ID}/edit`;
 
-// 可選 Apps Script Web App 網址
-export const HARDCODED_APPS_SCRIPT_URL = '';
+// Google Apps Script Web App 專屬同步網址 (已部署並永久綁定)
+export const HARDCODED_APPS_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbw65_gDvA3QXOnO4oel3pSUcdLfja_u8-PMJIYKLdvX5XEbaoITrO2Op-BKy6BGCt1K/exec';
 
 // 3. 固定的 13 位核心社員名單
 export const CORE_MEMBERS = [
