@@ -4,23 +4,23 @@ import { StorageService } from './services/storage';
 import {
   CORE_MEMBERS,
   SECRET_ACCESS_KEY,
-  HARDCODED_GOOGLE_SHEET_ID,
   GOOGLE_SHEET_URL,
 } from './config';
 import { CreateEventModal } from './components/CreateEventModal';
+import { EditEventModal } from './components/EditEventModal';
+import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SelectMemberModal } from './components/SelectMemberModal';
 import { AccessGate } from './components/AccessGate';
 import { BrandLogo } from './components/BrandLogo';
 import {
   Plus,
   Share2,
-  Copy,
   CheckCircle2,
   XCircle,
   Clock,
   Trash2,
+  Edit2,
   Calendar,
-  ExternalLink,
   FileSpreadsheet,
 } from 'lucide-react';
 
@@ -28,6 +28,8 @@ export default function App() {
   const [authorized, setAuthorized] = useState<boolean>(() => StorageService.isAuthValid());
   const [events, setEvents] = useState<SimpleEvent[]>(() => StorageService.getEvents());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<SimpleEvent | null>(null);
+  const [deletingEvent, setDeletingEvent] = useState<SimpleEvent | null>(null);
   const [pendingRSVP, setPendingRSVP] = useState<{
     event: SimpleEvent;
     choice: AttendanceChoice;
@@ -103,12 +105,20 @@ export default function App() {
     showToast('已新增活動！');
   };
 
-  const handleDeleteEvent = (id: string, title: string) => {
-    if (!confirm(`確定要刪除「${title}」嗎？`)) return;
+  const handleSaveEditEvent = (id: string, title: string, dateTime: string) => {
+    const updated = events.map((e) => (e.id === id ? { ...e, title, dateTime } : e));
+    setEvents(updated);
+    StorageService.saveEvents(updated);
+    setEditingEvent(null);
+    showToast('已更新活動資料！');
+  };
+
+  const handleConfirmDelete = (id: string) => {
     const updated = events.filter((e) => e.id !== id);
     setEvents(updated);
     StorageService.saveEvents(updated);
-    showToast('已刪除活動');
+    setDeletingEvent(null);
+    showToast('已成功刪除活動');
   };
 
   // Get the secret link for WhatsApp group (dennispoon9432.github.io/HKCN_atte/?key=hkcn2026cherry)
@@ -124,12 +134,6 @@ export default function App() {
     const link = getSecretLink();
     navigator.clipboard.writeText(link);
     showToast('已複製 WhatsApp 專屬存取連結！');
-  };
-
-  const handleCopyWhatsAppList = (event: SimpleEvent) => {
-    const text = StorageService.generateWhatsAppText(event, getSecretLink());
-    navigator.clipboard.writeText(text);
-    showToast('已複製 WhatsApp 出席名單！');
   };
 
   if (!authorized) {
@@ -168,7 +172,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Action: ONLY Copy Secret Link, Google Sheet Link, Add Event */}
+          {/* Right Action: Copy Secret Link, Google Sheet Link, Add Event */}
           <div className="flex items-center gap-1.5 sm:gap-2">
             <a
               href={GOOGLE_SHEET_URL}
@@ -227,7 +231,7 @@ export default function App() {
                 key={evt.id}
                 className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden"
               >
-                {/* Event Title & Date */}
+                {/* Event Header with Title, Date, Edit & Delete */}
                 <div className="p-4 sm:p-5 border-b border-slate-100 flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
@@ -238,13 +242,26 @@ export default function App() {
                       <span>{evt.dateTime}</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteEvent(evt.id, evt.title)}
-                    className="p-1.5 text-slate-300 hover:text-red-500 rounded-lg transition-colors cursor-pointer"
-                    title="刪除此活動"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+
+                  {/* Edit and Delete Buttons */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => setEditingEvent(evt)}
+                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                      title="編輯活動名稱或日期時間"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                      <span>編輯</span>
+                    </button>
+
+                    <button
+                      onClick={() => setDeletingEvent(evt)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                      title="需要輸入 HKCN 刪除此活動"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* 3 RSVP Buttons: 去到 / 去唔到 / TBC */}
@@ -324,31 +341,35 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
-                {/* Footer: Copy WhatsApp message */}
-                <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    全社 {CORE_MEMBERS.length} 位核心社員
-                  </span>
-                  <button
-                    onClick={() => handleCopyWhatsAppList(evt)}
-                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-[#00A651]" />
-                    <span>複製 WhatsApp 名單</span>
-                  </button>
-                </div>
               </article>
             );
           })
         )}
       </main>
 
-      {/* Create Event Modal (Only Title & DateTime) */}
+      {/* Create Event Modal */}
       {showCreateModal && (
         <CreateEventModal
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateEvent}
+        />
+      )}
+
+      {/* Edit Event Modal */}
+      {editingEvent && (
+        <EditEventModal
+          event={editingEvent}
+          onClose={() => setEditingEvent(null)}
+          onSave={handleSaveEditEvent}
+        />
+      )}
+
+      {/* Delete Confirmation Modal (Requires "HKCN") */}
+      {deletingEvent && (
+        <DeleteConfirmModal
+          event={deletingEvent}
+          onClose={() => setDeletingEvent(null)}
+          onConfirm={handleConfirmDelete}
         />
       )}
 
