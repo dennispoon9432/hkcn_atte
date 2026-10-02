@@ -1,0 +1,8 @@
+{
+  "name": "香港城北扶青社 - 活動出席登記系統",
+  "description": "專為香港城北扶青社設計的活動出席與報名管理系統，支援免密碼專屬連結一鍵簽到、實時人數統計及 WhatsApp 報名格式一鍵複製。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
