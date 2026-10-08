@@ -75,10 +75,10 @@ export const AccessGate: React.FC<AccessGateProps> = ({ onUnlock }) => {
           </button>
         </form>
 
-        <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-500 text-left space-y-1">
-          <p className="font-semibold text-slate-400">💡 社員專屬連結提示：</p>
+        <div className="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-400 text-left space-y-1">
+          <p className="font-semibold text-slate-300">💡 社員專屬連結提示：</p>
           <p>
-            幹事發送至 WhatsApp 的專屬連結尾段帶有 <code>?key={SECRET_ACCESS_KEY}</code>，點擊後會自動直接登入，無須輸入通行碼。
+            幹事發送至 WhatsApp 群組的專屬連結已內嵌授權通行碼，直接點擊連結即可自動登入，無須手動輸入密碼。
           </p>
         </div>
       </div>

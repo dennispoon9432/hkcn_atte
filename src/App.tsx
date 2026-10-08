@@ -103,15 +103,14 @@ export default function App() {
     updated.splice(toIndex, 0, moved);
     setEvents(updated);
     StorageService.saveEvents(updated);
-    StorageService.pushAllEventsToGoogleSheet(updated);
-
-    // Add log
-    StorageService.addLog({
+    // Add log & atomic push
+    const newLog = StorageService.createLogEntry({
       actionType: 'reorder',
       title: '調整活動排位',
       detail: `將「${moved.title}」排位調整至第 ${toIndex + 1} 位`,
     });
     setLogs(StorageService.getLogs());
+    StorageService.pushAllEventsToGoogleSheet(updated, newLog);
 
     showToast('已更新活動排列次序！');
   };
@@ -207,11 +206,6 @@ export default function App() {
 
     setEvents(updated);
     StorageService.saveEvents(updated);
-
-    // Push to Google Sheet immediately
-    StorageService.pushAllEventsToGoogleSheet(updated);
-    StorageService.pushRSVP(event.title, memberName, choice, remark, updated);
-
     setPendingRSVP(null);
 
     const label =
@@ -224,13 +218,16 @@ export default function App() {
         : `TBC ⏳${remark ? ` (${remark})` : ''}`;
 
     // Add system log entry
-    StorageService.addLog({
+    const newLog = StorageService.createLogEntry({
       actionType: 'rsvp',
       title: '出席登記改動',
       memberName,
       detail: `${memberName} 於「${event.title}」登記出席狀態為：${label}`,
     });
     setLogs(StorageService.getLogs());
+
+    // Single atomic push: writes RSVP and appends log in ONE request
+    StorageService.pushRSVP(event.title, memberName, choice, remark, updated, newLog);
 
     showToast(`${memberName} 已成功登記：${label}`);
   };
@@ -248,16 +245,14 @@ export default function App() {
     setEvents(updated);
     StorageService.saveEvents(updated);
 
-    // Push to Google Sheet
-    StorageService.pushAllEventsToGoogleSheet(updated);
-
-    // Add log
-    StorageService.addLog({
+    // Add log & atomic push
+    const newLog = StorageService.createLogEntry({
       actionType: 'create',
       title: '新增活動',
       detail: `成功建立活動「${title}」（時間：${dateTime}）`,
     });
     setLogs(StorageService.getLogs());
+    StorageService.pushAllEventsToGoogleSheet(updated, newLog);
 
     setShowCreateModal(false);
     showToast('已新增活動並同步至 Google Sheet！');
@@ -269,16 +264,14 @@ export default function App() {
     setEvents(updated);
     StorageService.saveEvents(updated);
 
-    // Push to Google Sheet
-    StorageService.pushAllEventsToGoogleSheet(updated);
-
-    // Add log
-    StorageService.addLog({
+    // Add log & atomic push
+    const newLog = StorageService.createLogEntry({
       actionType: 'edit',
       title: '修改活動資料',
       detail: `修改活動「${existing?.title || title}」之資料為：「${title}」（時間：${dateTime}）`,
     });
     setLogs(StorageService.getLogs());
+    StorageService.pushAllEventsToGoogleSheet(updated, newLog);
 
     setEditingEvent(null);
     showToast('已更新活動並同步至 Google Sheet！');
@@ -290,16 +283,14 @@ export default function App() {
     setEvents(updated);
     StorageService.saveEvents(updated);
 
-    // Push to Google Sheet
-    StorageService.pushAllEventsToGoogleSheet(updated);
-
-    // Add log
-    StorageService.addLog({
+    // Add log & atomic push
+    const newLog = StorageService.createLogEntry({
       actionType: 'delete',
       title: '刪除活動',
       detail: `輸入 HKCN 確認刪除活動「${toDelete?.title || id}」`,
     });
     setLogs(StorageService.getLogs());
+    StorageService.pushAllEventsToGoogleSheet(updated, newLog);
 
     setDeletingEvent(null);
     showToast('已成功刪除活動');

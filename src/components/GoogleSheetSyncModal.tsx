@@ -35,74 +35,149 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
   };
 
   const appsScriptCode = `function doGet(e) {
-  var sheet = getOrCreateSheet();
-  var data = sheet.getDataRange().getValues();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var eventsSheet = getOrCreateSheet(ss, 'Events', getEventsHeaders(), '#00A651');
+  var logsSheet = getOrCreateSheet(ss, 'SystemLogs', getLogsHeaders(), '#6B21A8');
+
+  var logRows = logsSheet.getDataRange().getValues();
+  var logs = [];
+  for (var j = 1; j < logRows.length; j++) {
+    var lRow = logRows[j];
+    if (!lRow[0] && !lRow[1]) continue;
+    logs.push({
+      id: String(lRow[0] || 'log-' + j),
+      timestamp: lRow[1] ? String(lRow[1]) : new Date().toISOString(),
+      actionType: String(lRow[2] || 'rsvp'),
+      title: String(lRow[3] || ''),
+      memberName: String(lRow[4] || ''),
+      detail: String(lRow[5] || '')
+    });
+  }
+
+  var eventRows = eventsSheet.getDataRange().getValues();
   var events = [];
-  for (var i = 1; i < data.length; i++) {
-    var row = data[i];
-    if (!row[0]) continue;
-    var attendance = {};
-    try { if (row[3]) attendance = JSON.parse(row[3]); } catch (err) {}
+  for (var i = 1; i < eventRows.length; i++) {
+    var row = eventRows[i];
+    if (!row[0] && !row[1]) continue;
+    var attendance = {}, remarks = {};
+    if (row[3]) {
+      try {
+        var parsed = JSON.parse(String(row[3]));
+        attendance = parsed.attendance || parsed;
+        remarks = parsed.remarks || {};
+      } catch (err) {}
+    }
     events.push({
       id: String(row[0] || 'evt-' + i),
       title: String(row[1] || ''),
       dateTime: String(row[2] || ''),
       attendance: attendance,
+      remarks: remarks,
       createdAt: row[4] ? String(row[4]) : new Date().toISOString()
     });
   }
-  return ContentService.createTextOutput(JSON.stringify({ status: 'success', events: events })).setMimeType(ContentService.MimeType.JSON);
+
+  logs.reverse();
+  return jsonResponse({ status: 'success', events: events, logs: logs });
 }
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (err) { return jsonResponse({ status: 'error' }); }
   try {
     var payload = JSON.parse(e.postData.contents);
-    var sheet = getOrCreateSheet();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (payload.action === 'sync_all' && Array.isArray(payload.events)) {
-      sheet.clearContents();
-      setupHeaders(sheet);
-      var rows = [];
-      for (var i = 0; i < payload.events.length; i++) {
-        var evt = payload.events[i];
-        rows.push([
-          evt.id,
-          evt.title,
-          evt.dateTime,
-          JSON.stringify(evt.attendance || {}),
-          evt.createdAt || new Date().toISOString(),
-          getSummary(evt.attendance, 'attending'),
-          getSummary(evt.attendance, 'declined'),
-          getSummary(evt.attendance, 'tbc')
-        ]);
+      var eventsSheet = getOrCreateSheet(ss, 'Events', getEventsHeaders(), '#00A651');
+      writeAllEvents(eventsSheet, payload.events);
+      if (payload.log) {
+        var logsSheet = getOrCreateSheet(ss, 'SystemLogs', getLogsHeaders(), '#6B21A8');
+        appendLog(logsSheet, payload.log);
       }
-      if (rows.length > 0) sheet.getRange(2, 1, rows.length, 8).setValues(rows);
-      return ContentService.createTextOutput(JSON.stringify({ status: 'success' })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ status: 'success' });
     }
+    if (payload.action === 'rsvp') {
+      var eventsSheet = getOrCreateSheet(ss, 'Events', getEventsHeaders(), '#00A651');
+      if (Array.isArray(payload.events) && payload.events.length > 0) {
+        writeAllEvents(eventsSheet, payload.events);
+      }
+      if (payload.log) {
+        var logsSheet = getOrCreateSheet(ss, 'SystemLogs', getLogsHeaders(), '#6B21A8');
+        appendLog(logsSheet, payload.log);
+      }
+      return jsonResponse({ status: 'success' });
+    }
+    return jsonResponse({ status: 'success' });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+    return jsonResponse({ status: 'error', message: err.toString() });
+  } finally {
+    lock.releaseLock();
   }
 }
 
-function getOrCreateSheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Events');
-  if (!sheet) { sheet = ss.getActiveSheet(); sheet.setName('Events'); }
-  if (sheet.getLastRow() === 0) setupHeaders(sheet);
-  return sheet;
+function writeAllEvents(sheet, events) {
+  setupHeaders(sheet, getEventsHeaders(), '#00A651');
+  if (!events || events.length === 0) return;
+  var rows = [];
+  for (var i = 0; i < events.length; i++) {
+    var evt = events[i];
+    var attendance = evt.attendance || {};
+    var remarks = evt.remarks || {};
+    rows.push([
+      evt.id || 'evt-' + i,
+      evt.title,
+      evt.dateTime,
+      JSON.stringify({ attendance: attendance, remarks: remarks }),
+      evt.createdAt || new Date().toISOString(),
+      getSummaryText(attendance, remarks, 'attending'),
+      getSummaryText(attendance, remarks, 'late_early'),
+      getSummaryText(attendance, remarks, 'declined'),
+      getSummaryText(attendance, remarks, 'tbc')
+    ]);
+  }
+  sheet.getRange(2, 1, rows.length, 9).setValues(rows);
+  var lastRow = sheet.getLastRow();
+  if (lastRow > rows.length + 1) sheet.deleteRows(rows.length + 2, lastRow - (rows.length + 1));
 }
 
-function setupHeaders(sheet) {
-  var headers = ['活動ID', '活動名稱', '日期時間', '出席數據(JSON)', '建立時間', '去到名單', '去唔到名單', 'TBC名單'];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  sheet.getRange(1, 1, 1, headers.length).setBackground('#00A651').setFontColor('#ffffff').setFontWeight('bold');
-  sheet.setFrozenRows(1);
+function appendLog(sheet, log) {
+  sheet.appendRow([log.id, log.timestamp, log.actionType, log.title, log.memberName, log.detail]);
 }
 
-function getSummary(attendance, choice) {
+function getOrCreateSheet(ss, name, headers, color) {
+  var s = ss.getSheetByName(name);
+  if (!s) { s = ss.insertSheet(name); setupHeaders(s, headers, color); }
+  return s;
+}
+
+function setupHeaders(s, headers, color) {
+  s.getRange(1, 1, 1, headers.length).setValues([headers]);
+  s.getRange(1, 1, 1, headers.length).setBackground(color || '#00A651').setFontColor('#ffffff').setFontWeight('bold');
+  s.setFrozenRows(1);
+}
+
+function getEventsHeaders() {
+  return ['活動ID', '活動名稱', '日期時間', '出席數據(JSON)', '建立時間', '去到名單', '遲到早退名單', '去唔到名單', 'TBC名單'];
+}
+
+function getLogsHeaders() {
+  return ['紀錄ID', '時間', '操作類型', '標題', '社員', '詳情'];
+}
+
+function getSummaryText(attendance, remarks, choice) {
   if (!attendance) return '';
   var list = [];
-  for (var k in attendance) { if (attendance[k] === choice) list.push(k); }
+  for (var k in attendance) {
+    if (attendance[k] === choice) {
+      if (remarks && remarks[k]) list.push(k + ' (' + remarks[k] + ')');
+      else list.push(k);
+    }
+  }
   return list.join(', ');
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }`;
 
   const handleCopyCode = () => {
